@@ -1,4 +1,3 @@
-
 ## Problem Statement:
 # Age Detection from Facial Features
 # The objective of this project is to develop a robust and
@@ -73,8 +72,8 @@ print(f"Dataframe saved to {file_path}")
 
 ## split datset
 
-df_train, df_temp = train_test_split(df, test_size=0.3, stratify = df.Age)
-df_test, df_valid = train_test_split(df_temp, test_size=0.5, stratify = df_temp.Age)
+df_train, df_temp = train_test_split(df, test_size=0.3, stratify=df.Age)
+df_test, df_valid = train_test_split(df_temp, test_size=0.5, stratify=df_temp.Age)
 print(df_train.shape, df_test.shape)
 
 df_train.to_csv("train_data.csv", index=False)
@@ -85,8 +84,8 @@ df_valid.to_csv("valid_data.csv", index=False)
 train_transform = transforms.Compose([
     transforms.Resize((128, 128)),
     transforms.RandomHorizontalFlip(),
-    transforms.RandomRotation(degrees = 15),
-    transforms.ColorJitter(brightness=0.2, contrast = 0.2, saturation=0.2, hue = 0.1),
+    transforms.RandomRotation(degrees=15),
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
     transforms.ToTensor(),
     transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
 ])
@@ -97,6 +96,7 @@ test_transform = transforms.Compose([
     transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
 ])
 
+
 ## costom datset
 class UTKFaceDataset(Dataset):
     def __init__(self, root_dir, file_csv, transform):
@@ -104,14 +104,14 @@ class UTKFaceDataset(Dataset):
         self.csv_file = file_csv
         self.transform = transform
         self.data = pd.read_csv(self.csv_file)
-        self.gender_dict = {'Male':0, 'Female':1}
-        self.id_dict = {"White":0, "Black":1, "Asian":2, "Indian":3, "Others":4}
+        self.gender_dict = {'Male': 0, 'Female': 1}
+        self.id_dict = {"White": 0, "Black": 1, "Asian": 2, "Indian": 3, "Others": 4}
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, item):
-        sample = self.data.iloc[item,:]
+        sample = self.data.iloc[item, :]
 
         image_name = sample.ImageName
         age = sample.Age
@@ -128,16 +128,44 @@ class UTKFaceDataset(Dataset):
 
         return img, age, country, gender
 
+
 # test dataset
-temp_datset = UTKFaceDataset(root_dir= Dir_Dataset, file_csv= "train_data.csv", transform= train_transform)
+temp_datset = UTKFaceDataset(root_dir=Dir_Dataset, file_csv="train_data.csv", transform=train_transform)
 img, age, country, gender = temp_datset[1]
 
-train_set = UTKFaceDataset(root_dir= Dir_Dataset, file_csv= "train_data.csv", transform= train_transform)
-test_set = UTKFaceDataset(root_dir= Dir_Dataset, file_csv= "test_data.csv", transform= test_transform)
-valid_set = UTKFaceDataset(root_dir= Dir_Dataset, file_csv= "valid_data.csv", transform= test_transform)
+## create loader
 
-train_loader = DataLoader(train_set, batch_size = 128, shuffle = True)
-test_loader = DataLoader(test_set, batch_size = 128, shuffle = False)
-valid_loader = DataLoader(valid_set, batch_size = 128, shuffle = False)
+train_set = UTKFaceDataset(root_dir=Dir_Dataset, file_csv="train_data.csv", transform=train_transform)
+test_set = UTKFaceDataset(root_dir=Dir_Dataset, file_csv="test_data.csv", transform=test_transform)
+valid_set = UTKFaceDataset(root_dir=Dir_Dataset, file_csv="valid_data.csv", transform=test_transform)
+
+train_loader = DataLoader(train_set, batch_size=128, shuffle=True)
+test_loader = DataLoader(test_set, batch_size=128, shuffle=False)
+valid_loader = DataLoader(valid_set, batch_size=128, shuffle=False)
+
 
 ## Model
+
+class ModelAGEDecetion(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V2)
+        self.model.fc = nn.Linear(in_features=2048, out_features=1, bias=True)
+
+    def forward(self, x):
+        return self.model(x)
+
+
+self_ = ModelAGEDecetion()
+print(self_.model)
+
+## config
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+model = self_.model.to(device)
+
+loss_fn = nn.L1Loss()
+
+optimizer = optim.SGD(model.parameters(), lr=0.005, momentun=0.9, weight_decay=1e-4)
+
+metric = tm.MeanAbsoluteError()
