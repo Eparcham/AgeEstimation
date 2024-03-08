@@ -70,3 +70,13 @@ file_path = 'UTKFace.csv'
 df.to_csv(file_path, index=False)
 
 print(f"Dataframe saved to {file_path}")
+
+## split datset
+
+df_train, df_temp = train_test_split(df, test_size=0.3, stratify = df.Age)
+df_test, df_valid = train_test_split(df_temp, test_size=0.5, stratify = df_temp.Age)
+print(df_train.shape, df_test.shape)
+
+df_train.to_csv("train_data.csv", index=False)
+df_test.to_csv("test_data.csv", index=False)
+df_valid.to_csv("valid_data.csv", index=False)
