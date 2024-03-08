@@ -56,7 +56,7 @@ for full_path in list_image:
             gender = "Male" if split_name[1] == '0' else "Female"
             id_ = Identity[int(split_name[2])]
             data.append({
-                'Image Name': name,
+                'ImageName': name,
                 'ID': id_,
                 'Gender': gender,
                 'Age': age
@@ -97,3 +97,47 @@ test_transform = transforms.Compose([
     transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
 ])
 
+## costom datset
+class UTKFaceDataset(Dataset):
+    def __init__(self, root_dir, file_csv, transform):
+        self.root_dir = root_dir
+        self.csv_file = file_csv
+        self.transform = transform
+        self.data = pd.read_csv(self.csv_file)
+        self.gender_dict = {'Male':0, 'Female':1}
+        self.id_dict = {"White":0, "Black":1, "Asian":2, "Indian":3, "Others":4}
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, item):
+        sample = self.data.iloc[item,:]
+
+        image_name = sample.ImageName
+        age = sample.Age
+        gender = sample.Gender
+        country = sample.ID
+
+        img = Image.open(self.root_dir + image_name)
+        img = self.transform(img)
+
+        age = torch.tensor(age, dtype=torch.float32)
+
+        country = torch.tensor(self.id_dict[country], dtype=torch.float32)
+        gender = torch.tensor(self.gender_dict[gender], dtype=torch.float32)
+
+        return img, age, country, gender
+
+# test dataset
+temp_datset = UTKFaceDataset(root_dir= Dir_Dataset, file_csv= "train_data.csv", transform= train_transform)
+img, age, country, gender = temp_datset[1]
+
+train_set = UTKFaceDataset(root_dir= Dir_Dataset, file_csv= "train_data.csv", transform= train_transform)
+test_set = UTKFaceDataset(root_dir= Dir_Dataset, file_csv= "test_data.csv", transform= test_transform)
+valid_set = UTKFaceDataset(root_dir= Dir_Dataset, file_csv= "valid_data.csv", transform= test_transform)
+
+train_loader = DataLoader(train_set, batch_size = 128, shuffle = True)
+test_loader = DataLoader(test_set, batch_size = 128, shuffle = False)
+valid_loader = DataLoader(valid_set, batch_size = 128, shuffle = False)
+
+## Model
