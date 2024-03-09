@@ -195,7 +195,7 @@ optimizer = optim.SGD(model.parameters(), lr=0.005, momentum=0.9, weight_decay=1
 
 metric = tm.MeanAbsoluteError().to(device)
 # metric = tm.Accuracy().to(device)
-
+ 
 def train_one_epoch(train_loader, model, loss_fn, device, optimizer, metric, epoch=None):
     model = model.train()
     loss_train = AverageMeter()
