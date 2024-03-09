@@ -121,7 +121,7 @@ class UTKFaceDataset(Dataset):
         img = Image.open(self.root_dir + image_name)
         img = self.transform(img)
 
-        age = torch.tensor(age, dtype=torch.float32)
+        age = torch.tensor([age], dtype=torch.float32)  ## very important to use one class use [] in input
 
         country = torch.tensor(self.id_dict[country], dtype=torch.float32)
         gender = torch.tensor(self.gender_dict[gender], dtype=torch.float32)
@@ -132,7 +132,7 @@ class UTKFaceDataset(Dataset):
 # test dataset
 temp_datset = UTKFaceDataset(root_dir=Dir_Dataset, file_csv="train_data.csv", transform=train_transform)
 img, age, country, gender = temp_datset[1]
-
+a = 1
 ## create loader
 
 train_set = UTKFaceDataset(root_dir=Dir_Dataset, file_csv="train_data.csv", transform=train_transform)
@@ -156,6 +156,30 @@ class ModelAGEDecetion(nn.Module):
         return self.model(x)
 
 
+def num_trainable_params(model):
+    nums = sum(p.numel() for p in model.parameters() if p.requires_grad) / 1e6
+    return nums
+
+
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+
 self_ = ModelAGEDecetion()
 print(self_.model)
 
@@ -163,9 +187,39 @@ print(self_.model)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model = self_.model.to(device)
+print(f"num trainable params: {num_trainable_params(model)}")
 
 loss_fn = nn.L1Loss()
 
-optimizer = optim.SGD(model.parameters(), lr=0.005, momentun=0.9, weight_decay=1e-4)
+optimizer = optim.SGD(model.parameters(), lr=0.005, momentum=0.9, weight_decay=1e-4)
 
-metric = tm.MeanAbsoluteError()
+metric = tm.MeanAbsoluteError().to(device)
+# metric = tm.Accuracy().to(device)
+
+def train_one_epoch(train_loader, model, loss_fn, device, optimizer, metric, epoch=None):
+    model = model.train()
+    loss_train = AverageMeter()
+    metric.reset()
+    with tqdm.tqdm(train_loader, unit='batch') as tepoch:
+        for inputs, targets, _, _ in tepoch:
+            if epoch:
+                tepoch.set_description(f"Epoch {epoch}")
+            targets = targets.to(device)
+            inputs = inputs.to(device)
+
+            outputs = model(inputs)
+            loss = loss_fn(outputs, targets)
+            loss.backward()
+
+            optimizer.step()
+            optimizer.zero_grad()
+
+            loss_train.update(loss.item(), n=len(targets))
+            # outputs = (outputs > 0.5).int()
+            metric.update(outputs, targets)
+            tepoch.set_postfix(loss=loss_train.avg, metric=metric.compute().item())
+
+    return model, loss_train.avg, metric.compute().item()
+
+
+train_one_epoch(train_loader, model, loss_fn, device, optimizer, metric, epoch=1)
