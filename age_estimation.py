@@ -40,45 +40,47 @@ import tqdm
 import torchmetrics as tm
 import glob
 
+do_again = False
 ## Dataset
 
-Dir_Dataset = "H:/PytorchClass/Data/UTKFace/utkface_aligned_cropped/UTKFace/"
-list_image = glob.glob(os.path.join(Dir_Dataset, "*.jpg"))
-Identity = ["White", "Black", "Asian", "Indian", "Others"]
-data = []
-for full_path in list_image:
-    name = os.path.basename(full_path)
-    split_name = name.split("_")
-    if len(split_name) >= 4 and split_name[2].isdigit():
-        age = int(split_name[0])
-        if age < 80:
-            gender = "Male" if split_name[1] == '0' else "Female"
-            id_ = Identity[int(split_name[2])]
-            data.append({
-                'ImageName': name,
-                'ID': id_,
-                'Gender': gender,
-                'Age': age
-            })
-    else:
-        print(name)
+if do_again:
+    Dir_Dataset = "H:/PytorchClass/Data/UTKFace/utkface_aligned_cropped/UTKFace/"
+    list_image = glob.glob(os.path.join(Dir_Dataset, "*.jpg"))
+    Identity = ["White", "Black", "Asian", "Indian", "Others"]
+    data = []
+    for full_path in list_image:
+        name = os.path.basename(full_path)
+        split_name = name.split("_")
+        if len(split_name) >= 4 and split_name[2].isdigit():
+            age = int(split_name[0])
+            if age < 80:
+                gender = "Male" if split_name[1] == '0' else "Female"
+                id_ = Identity[int(split_name[2])]
+                data.append({
+                    'ImageName': name,
+                    'ID': id_,
+                    'Gender': gender,
+                    'Age': age
+                })
+        else:
+            print(name)
 
-df = pd.DataFrame(data)
+    df = pd.DataFrame(data)
 
-file_path = 'UTKFace.csv'
-df.to_csv(file_path, index=False)
+    file_path = 'UTKFace.csv'
+    df.to_csv(file_path, index=False)
 
-print(f"Dataframe saved to {file_path}")
+    print(f"Dataframe saved to {file_path}")
 
-## split datset
+    ## split datset
 
-df_train, df_temp = train_test_split(df, test_size=0.3, stratify=df.Age)
-df_test, df_valid = train_test_split(df_temp, test_size=0.5, stratify=df_temp.Age)
-print(df_train.shape, df_test.shape)
+    df_train, df_temp = train_test_split(df, test_size=0.3, stratify=df.Age)
+    df_test, df_valid = train_test_split(df_temp, test_size=0.5, stratify=df_temp.Age)
+    print(df_train.shape, df_test.shape)
 
-df_train.to_csv("train_data.csv", index=False)
-df_test.to_csv("test_data.csv", index=False)
-df_valid.to_csv("valid_data.csv", index=False)
+    df_train.to_csv("train_data.csv", index=False)
+    df_test.to_csv("test_data.csv", index=False)
+    df_valid.to_csv("valid_data.csv", index=False)
 
 ## train and test transform
 train_transform = transforms.Compose([
@@ -132,7 +134,7 @@ class UTKFaceDataset(Dataset):
 # test dataset
 temp_datset = UTKFaceDataset(root_dir=Dir_Dataset, file_csv="train_data.csv", transform=train_transform)
 img, age, country, gender = temp_datset[1]
-a = 1
+
 ## create loader
 
 train_set = UTKFaceDataset(root_dir=Dir_Dataset, file_csv="train_data.csv", transform=train_transform)
@@ -159,7 +161,6 @@ class ModelAGEDecetion(nn.Module):
 def num_trainable_params(model):
     nums = sum(p.numel() for p in model.parameters() if p.requires_grad) / 1e6
     return nums
-
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -197,6 +198,7 @@ metric = tm.MeanAbsoluteError().to(device)
 # metric = tm.Accuracy().to(device)
  
 def train_one_epoch(train_loader, model, loss_fn, device, optimizer, metric, epoch=None):
+    print("Start train")
     model = model.train()
     loss_train = AverageMeter()
     metric.reset()
@@ -221,5 +223,24 @@ def train_one_epoch(train_loader, model, loss_fn, device, optimizer, metric, epo
 
     return model, loss_train.avg, metric.compute().item()
 
+def evaluate(test_loader, model, loss_fn, device, metric):
+    print("Start evaluate")
+    model = model.eval()
+    loss_test = AverageMeter()
+    metric.reset()
+    with torch.inference_mode():
+        for inputs, targets, _, _ in test_loader:
+            targets = targets.to(device)
+            inputs = inputs.to(device)
 
-train_one_epoch(train_loader, model, loss_fn, device, optimizer, metric, epoch=1)
+            outputs = model(inputs)
+            loss = loss_fn(outputs, targets)
+
+            loss_test.update(loss.item(), n=len(targets))
+            metric.update(outputs, targets)
+
+    return model, loss_test.avg, metric.compute().item()
+
+if do_again:
+    train_one_epoch(train_loader, model, loss_fn, device, optimizer, metric, epoch=1)
+    evaluate(test_loader, model, loss_fn, device, metric)
