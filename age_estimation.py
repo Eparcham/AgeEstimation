@@ -39,12 +39,16 @@ import torchvision.models as models
 import tqdm
 import torchmetrics as tm
 import glob
+import face_recognition
 
 do_again = False
+load_model = True
+train_run = False
 ## Dataset
+Dir_Dataset = "H:/PytorchClass/Data/UTKFace/utkface_aligned_cropped/UTKFace/"
 
 if do_again:
-    Dir_Dataset = "H:/PytorchClass/Data/UTKFace/utkface_aligned_cropped/UTKFace/"
+
     list_image = glob.glob(os.path.join(Dir_Dataset, "*.jpg"))
     Identity = ["White", "Black", "Asian", "Indian", "Others"]
     data = []
@@ -182,17 +186,24 @@ class AverageMeter(object):
 
 
 self_ = ModelAGEDecetion()
-print(self_.model)
+# print(self_.model)
 
 ## config
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-model = self_.model.to(device)
+
+
+if load_model:
+    model_path = 'model.pt'
+    model = torch.load(model_path).to(device)
+else:
+    model = self_.model.to(device)
+
 print(f"num trainable params: {num_trainable_params(model)}")
 
 loss_fn = nn.L1Loss()
 
-optimizer = optim.SGD(model.parameters(), lr=0.005, momentum=0.9, weight_decay=1e-4)
+optimizer = optim.SGD(model.parameters(), lr=0.0008, momentum=0.9, weight_decay=1e-4)
 
 metric = tm.MeanAbsoluteError().to(device)
 # metric = tm.Accuracy().to(device)
@@ -239,9 +250,78 @@ def evaluate(test_loader, model, loss_fn, device, metric):
             loss_test.update(loss.item(), n=len(targets))
             metric.update(outputs, targets)
 
-    return model, loss_test.avg, metric.compute().item()
+    return  loss_test.avg, metric.compute().item()
 
 if do_again:
     train_one_epoch(train_loader, model, loss_fn, device, optimizer, metric, epoch=1)
     evaluate(test_loader, model, loss_fn, device, metric)
- 
+
+if train_run:
+    loss_train_hist = []
+    loss_valid_hist = []
+
+    metric_train_hist = []
+    metric_valid_hist = []
+
+    best_loss_valid = torch.inf
+    epoch_counter = 0
+
+    num_epochs = 2
+
+    for epoch in range(num_epochs):
+        # Train
+        model, loss_train, metric_train = train_one_epoch(train_loader, model, loss_fn, device, optimizer, metric, epoch=epoch)
+        # Validation
+        loss_valid, metric_valid = evaluate(valid_loader, model, loss_fn, device, metric)
+
+        loss_train_hist.append(loss_train)
+        loss_valid_hist.append(loss_valid)
+
+        metric_train_hist.append(metric_train)
+        metric_valid_hist.append(metric_valid)
+
+        if loss_valid < best_loss_valid:
+            torch.save(model, f'model.pt')
+            best_loss_valid = loss_valid
+            print('Model Saved!')
+
+        print(f'Valid: Loss = {loss_valid:.4}, MAE = {metric_valid:.4}')
+        print()
+
+        epoch_counter += 1
+
+
+    plt.figure(figsize=(8, 6))
+
+    plt.plot(range(epoch_counter), loss_train_hist, 'r-', label='Train')
+    plt.plot(range(epoch_counter), loss_valid_hist, 'b-', label='Validation')
+
+    plt.xlabel('Epoch')
+    plt.ylabel('loss')
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+
+    loss_test,metric_test = evaluate(test_loader, model, loss_fn, device, metric)
+    print(f"loss test images: {loss_test}")
+else: ## test infrence image
+    def inference(image_path, transform, model, face_detection=True):
+        if face_detection:
+            img = face_recognition.load_image_file(image_path)
+            top, right, bottom, left = face_recognition.face_locations(img)[0]
+            img_crop = img[top:bottom, left:right]
+            img_crop = Image.fromarray(img_crop)
+        else:
+            img_crop = Image.open(image_path).convert('RGB')
+
+        img_tensor = transform(img_crop).unsqueeze(0)
+        with torch.inference_mode():
+            preds = model(img_tensor.to(device)).item()
+
+        return preds, img_crop
+
+
+    preds, img = inference('Parchamage38.png',test_transform, model, face_detection=True)
+
+    print(f'{preds:.2f}')
+
